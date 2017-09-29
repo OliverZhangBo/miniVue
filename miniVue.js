@@ -1,20 +1,14 @@
 // author：ghostdp
 
 function Vue(opts){
-	this.init(opts);
-}
-Vue.prototype.init = function(opts){
 	this.$el = document.querySelector(opts.el);
 	this.$data = opts.data;
 	this.$methods = opts.methods;
-	this.$computed = opts.computed;
-	this.directArr = [];
-	this.modelFocus = false;
 	this.setArray();
-	this.$tmpl = this.template(this.$el);
-	this.render(this.$tmpl);
+	this.$temp = this.template(this.$el);
+	this.render(this.$temp);
 	this.listenDatas();
-};
+}
 Vue.prototype.template = function(elem){
 	var code = 'var r = [];\n';
 	var re_exp = /([^{]*)\{\{\s*([^}]+)\s*\}\}([^{]*)/g;
@@ -81,11 +75,11 @@ Vue.prototype.template = function(elem){
 	}
 	return gets(elem) + 'return r.join(\'\');';
 };
-Vue.prototype.render = function(tmpl){
-	var fn = new Function('data',tmpl);
+Vue.prototype.render = function(temp){
+	//console.log(temp);
+	var fn = new Function('data',temp);
 	this.$el.innerHTML = fn(this.$data);
 	this.collectDirect();
-	this.setCollectDirect();
 };
 Vue.prototype.listenDatas = function(){
 	for(var attr in this.$data){
@@ -94,36 +88,25 @@ Vue.prototype.listenDatas = function(){
 			this.$data[attr].__proto__ = this.newArrMethods;
 			for(var i=0;i<this.$data[attr].length;i++){
 				for(var attr_child in this.$data[attr][i]){
-					this.listenData(this.$data[attr][i],attr_child,this.cloneObj(this.$data[attr][i]));	
+					this.listenData(this.$data[attr][i],attr_child,this.cloneObj(this.$data[attr][i]));	   //初始数据修改触发
 				}
 			}
 		}
-	}
+	}	
 };
 Vue.prototype.listenData = function(obj,attr,data){
 	var This = this;
 	Object.defineProperty(obj, attr, {
 		configurable : true,
 		enumerable : true,
-		get: function(){
+		get : function(){
 			return data[attr];
 		},
-		set: function(val){
+		set : function(val){
 			data[attr] = val;
-			This.render(This.$tmpl);	
+			This.render(This.$temp);
 		}
 	});
-};
-Vue.prototype.cloneObj = function(obj){  
-	var newObj = {};  
-	if(obj instanceof Array){  
-		newObj = [];  
-	}  
-	for(var key in obj){  
-		var val = obj[key];  
-		newObj[key] = typeof val === 'object' ? this.cloneObj(val): val;  
-	}  
-	return newObj;  
 };
 Vue.prototype.setArray = function(){
 	var This = this;
@@ -141,27 +124,39 @@ Vue.prototype.setArray = function(){
 	]
 	.forEach(function(method){
 		var original = arrayProto[method];
-		This.def(arrayMethods, method, function mutator (){
+		This.def(arrayMethods, method, function(){
 			var args = [], len = arguments.length;
 			while(len--){
 				args[len] = arguments[len];
 				for(var attr in args[len]){
-					This.listenData(args[len],attr,This.cloneObj(args[len]));
+					This.listenData(args[len],attr,This.cloneObj(args[len])); //新数据修改后触发
 				}
 			}
 			var result = original.apply(this, args);
-			This.render(This.$tmpl);
+			
+			This.render(This.$temp);  //push等操作的时候触发
 			return result;
 		});
 	});
 };
-Vue.prototype.def = function(obj,key,val,enumerable){
+Vue.prototype.def = function(obj,key,val){
 	Object.defineProperty(obj,key,{
 		value: val,
-		enumerable: !!enumerable,
+		enumerable: true,
 		writable: true,
 		configurable: true
 	});
+};
+Vue.prototype.cloneObj = function(obj){  
+	var newObj = {};  
+	if(obj instanceof Array){  
+		newObj = [];  
+	}  
+	for(var key in obj){  
+		var val = obj[key];  
+		newObj[key] = typeof val === 'object' ? this.cloneObj(val): val;  
+	}  
+	return newObj;  
 };
 Vue.prototype.collectDirect = function(){
 	this.directArr = [];
@@ -184,6 +179,7 @@ Vue.prototype.collectDirect = function(){
 		}
 	}
 	get.bind(this)(this.$el);
+	this.setCollectDirect();
 };
 Vue.prototype.setCollectDirect = function(){
 	for(var i=0;i<this.directArr.length;i++){
@@ -209,18 +205,27 @@ Vue.prototype['v-on'] = function(elem,prop,value){
 };
 Vue.prototype['v-model'] = function(elem,prop,value){
 	var This = this;
+	var flag = true;
 	elem.value = this.$data[value];
 	if(this.modelFocus){
 		elem.focus();
 	}
-	elem.addEventListener('input',function(){
+	elem.addEventListener('keyup',function(){
 		This.$data[value] = this.value;
 		This.modelFocus = true;
-		This.render(This.$tmpl);
+		if(flag){
+			This.render(This.$temp);
+		}
 	},false);
+	elem.addEventListener('compositionstart',function(){
+		flag = false;
+	});
+	elem.addEventListener('compositionend',function(){
+		flag = true;
+	});
 	elem.addEventListener('blur',function(){
 		setTimeout(function(){
 			This.modelFocus = false;
 		},100);
-	},false);	
+	},false);
 };
